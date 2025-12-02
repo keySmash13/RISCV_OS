@@ -1,5 +1,5 @@
 # adjust CROSS if your toolchain prefix differs
-CROSS ?= riscv64-elf-
+CROSS ?= riscv64-unknown-elf-
 CC      := $(CROSS)gcc
 OBJCOPY := $(CROSS)objcopy
 
