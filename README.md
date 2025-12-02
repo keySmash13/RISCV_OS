@@ -4,14 +4,14 @@
 Install QEMU: https://qemu.weilnetz.de/w64/  
 run qemu-w64-setup-20250826.exe  
 In WSL or Linux run:  
-`sudo apt-get update`
+`sudo apt-get update`  
 `sudo apt-get install gcc-riscv64-linux-gnu g++-riscv64-linux-gnu binutils-riscv64-linux-gnu`
 
 ## HOW TO RUN
 In WSL or Linux:
-`make clean`
-`make`
-`./run.sh`
+`make clean`  
+`make`  
+`./run.sh`  
 
 ## Tiny RISC-V 64 Kernel
 
