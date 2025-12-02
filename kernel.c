@@ -167,7 +167,9 @@ Node *fs_find(Node *dir, const char *name) {
 
 Node* fs_traverse_path(const char *path, int create_missing) {
     Node *current = cwd;
-    if (*path == '/') current = &root;  // absolute path
+
+    // Absolute path starts from root
+    if (*path == '/') current = &root;
 
     char temp[MAX_NAME];
     int i = 0;
@@ -175,28 +177,33 @@ Node* fs_traverse_path(const char *path, int create_missing) {
     while (*path) {
         if (*path == '/' || *(path+1) == '\0') {
             int len = i;
+            // include last char if not a slash
             if (*(path+1) == '\0' && *path != '/') temp[len++] = *path;
             temp[len] = 0;
 
-            if (len == 0) { path++; i = 0; continue; } // skip "//"
+            i = 0; // reset temp index
+
+            if (len == 0) { 
+                path++; 
+                continue; // skip empty components "//"
+            }
 
             // handle special components
             if (strcmp(temp, ".") == 0) {
-                // stay in current directory
+                // do nothing, stay in current
             } else if (strcmp(temp, "..") == 0) {
                 if (current->parent) current = current->parent;
             } else {
                 Node *child = fs_find(current, temp);
+
                 if (!child) {
                     if (create_missing) {
-                        Node *new_dir = fs_alloc_node();
-                        if (!new_dir) { uart_puts("Node limit reached!\n"); return NULL; }
-                        new_dir->type = DIR_NODE;
-                        new_dir->parent = current;
-                        for (int j = 0; j < len && j < MAX_NAME-1; j++) new_dir->name[j] = temp[j];
-                        new_dir->name[len] = 0;
-                        current->children[current->child_count++] = new_dir;
-                        child = new_dir;
+                        child = fs_alloc_node();
+                        if (!child) { uart_puts("Node limit reached!\n"); return NULL; }
+                        child->type = DIR_NODE;
+                        child->parent = current;
+                        strcpy(child->name, temp);
+                        current->children[current->child_count++] = child;
                     } else {
                         uart_puts("No such directory in path!\n");
                         return NULL;
@@ -210,8 +217,6 @@ Node* fs_traverse_path(const char *path, int create_missing) {
 
                 current = child;
             }
-
-            i = 0;
         } else {
             if (i < MAX_NAME-1) temp[i++] = *path;
         }
@@ -221,6 +226,7 @@ Node* fs_traverse_path(const char *path, int create_missing) {
 
     return current;
 }
+
 
 
 //--------------------------------------------------
