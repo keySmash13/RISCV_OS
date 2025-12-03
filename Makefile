@@ -7,7 +7,7 @@ CFLAGS  := -march=rv64gc -mabi=lp64d -nostdinc -nostdlib -ffreestanding \
            -fno-builtin -O2 -Wall -Wextra -mcmodel=medany
 LDFLAGS := -T linker.ld -nostdlib -static
 
-SRCS    := boot.S kernel.c
+SRCS    := boot.S libstr.c io.c fs.c cmd.c kernel.c
 OBJS    := $(SRCS:.c=.o)
 OBJS    := $(OBJS:.S=.o)
 
