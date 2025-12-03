@@ -17,6 +17,7 @@ typedef struct Node {
     struct Node *children[MAX_FILES];
     struct Node *parent;
     unsigned int child_count;
+    unsigned int readonly;   // 0 = writable, 1 = read-only
 } Node;
 
 Node* fs_alloc_node(void);
@@ -25,6 +26,7 @@ Node *fs_find(Node *dir, const char *name);
 Node* fs_traverse_path(const char *path, int create_missing);
 void fs_mkdir(const char *path);
 void fs_touch(const char *path);
+void fs_touch_ro(const char *path);
 void fs_ls(const char *path);
 void fs_cd(const char *path);
 void fs_pwd_recursive(Node *n);

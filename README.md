@@ -81,3 +81,16 @@ This is a minimal RISC-V 64 linker script for the kernel. Key points:
 - Discards `.eh_frame` (no exception handling).
 
 Used to control memory layout and entry point for bare-metal execution.
+
+## Other .c and .h files
+Different command libraries
+### cmd.c
+Contains cmd line commands like `help` and `echo`
+### fs.c
+Controls the filesystem so one can make files, directories, cd, etc.
+### io.c
+Controls terminal input/output
+### libstr.c
+A small library of string commands to add string functionality to other files
+### stdint.h
+Small list of declarations for uint coding.

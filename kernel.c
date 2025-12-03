@@ -24,6 +24,18 @@ void run_command(char *input) {
         char *args = input + 5;
         while (*args == ' ') args++;
         fs_mkdir(args);
+    } else if (strncmp(input, "touchro", 7) == 0) {
+        // Move pointer past "touchro"
+        char *args = input + 7;
+        // Skip any leading spaces
+        while (*args == ' ') args++;
+        // Check if filename is empty
+        if (*args == '\0') {
+            uart_puts("Error: No filename provided.\n");
+        } else {
+            // Create the read-only file
+            fs_touch_ro(args);
+        }
     } else if (strncmp(input, "touch", 5) == 0) {
         char *args = input + 5;
         while (*args == ' ') args++;

@@ -26,6 +26,7 @@ Node* fs_alloc_node(void) {
     for (unsigned int i = 0; i < MAX_NAME; i++) n->name[i] = 0;
     for (unsigned int i = 0; i < 128; i++) n->content[i] = 0;
     n->parent = NULL;
+    n->readonly = 0; //Default writeable
 
     return n;
 }
@@ -240,6 +241,76 @@ void fs_touch(const char *path) {
     file->type = FILE_NODE;
     file->parent = parent;
     strcpy(file->name, file_name);
+    file->readonly = 0;
+
+    parent->children[parent->child_count++] = file;
+}
+
+// Create a read-only file (touchro)
+void fs_touch_ro(const char *path) {
+    if (!path) return;
+
+    // Skip leading spaces
+    while (*path == ' ') path++;
+
+    if (*path == '\0') {
+        uart_puts("Error: No filename provided.\n");
+        return;
+    }
+
+    const char *last_slash = NULL;
+
+    // Find last slash to split parent/name
+    for (const char *p = path; *p; p++)
+        if (*p == '/') last_slash = p;
+
+    char file_name[MAX_NAME];
+    char parent_path[64];
+
+    // Case: simple filename
+    if (!last_slash) {
+        int j = 0;
+        while (path[j] && j < MAX_NAME-1) {
+            file_name[j] = path[j];
+            j++;
+        }
+        file_name[j] = 0;
+        strcpy(parent_path, "");
+    } else {
+        // Split parent path
+        int len = last_slash - path;
+        for (int i = 0; i < len; i++)
+            parent_path[i] = path[i];
+        parent_path[len] = 0;
+
+        // Extract filename
+        int j = 0;
+        const char *name_ptr = last_slash + 1;
+        while (*name_ptr && j < MAX_NAME-1)
+            file_name[j++] = *name_ptr++;
+        file_name[j] = 0;
+    }
+
+    Node *parent = (*parent_path) ? fs_traverse_path(parent_path, 0) : cwd;
+    if (!parent) return;
+
+    if (fs_find(parent, file_name)) {
+        uart_puts("Name already exists!\n");
+        return;
+    }
+    if (parent->child_count >= MAX_FILES) {
+        uart_puts("Directory full!\n");
+        return;
+    }
+
+    // Create file node
+    Node *file = fs_alloc_node();
+    if (!file) { uart_puts("Node limit reached!\n"); return; }
+
+    file->type = FILE_NODE;
+    file->parent = parent;
+    strcpy(file->name, file_name);
+    file->readonly = 1; // read-only file
 
     parent->children[parent->child_count++] = file;
 }
@@ -332,6 +403,11 @@ void fs_write(const char *path, const char *text) {
     Node *file = fs_find(parent, file_name);
     if (!file) { uart_puts("File does not exist!\n"); return; }
     if (file->type != FILE_NODE) { uart_puts("Not a file!\n"); return; }
+
+    if (file->readonly) {
+        uart_puts("File is read-only! Write aborted.\n");
+        return;
+    }
 
     // Write text to file->content
     int i;
