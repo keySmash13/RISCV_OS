@@ -132,6 +132,7 @@ typedef struct Node {
     struct Node *children[MAX_FILES];
     struct Node *parent;
     unsigned int child_count;
+    unsigned int readonly;   // 0 = writable, 1 = read-only
 } Node;
 
 //--------------------------------------------------
@@ -154,6 +155,7 @@ Node* fs_alloc_node(void) {
     for (unsigned int i = 0; i < MAX_NAME; i++) n->name[i] = 0;
     for (unsigned int i = 0; i < 128; i++) n->content[i] = 0;
     n->parent = NULL;
+    n->readonly = 0;  //default: writable
 
     return n;
 }
@@ -320,8 +322,104 @@ void fs_mkdir(const char *path) {
     parent->children[parent->child_count++] = dir;
 }
 
+//==================================================
+//             STRING TRIMMING UTILITY
+//==================================================
+
+// Trim leading and trailing spaces in-place
+void trim(char *s) {
+    // Trim leading spaces
+    char *start = s;
+    while (*start == ' ') start++;
+    
+    // Move the string to the start
+    char *dst = s;
+    while (*start) *dst++ = *start++;
+    *dst = 0;
+
+    // Trim trailing spaces
+    if (dst == s) return; // empty string
+    dst--;
+    while (dst >= s && *dst == ' ') *dst-- = 0;
+}
+
+//==================================================
+//             FILE CREATION FUNCTIONS
+//==================================================
+
+
 // Create empty file (touch)
 void fs_touch(const char *path) {
+    char clean_path[64];
+    strcpy(clean_path, path);
+    trim(clean_path);
+
+    const char *last_slash = NULL;
+
+    for (const char *p = clean_path; *p; p++)
+        if (*p == '/') last_slash = p;
+
+    char file_name[MAX_NAME];
+    char parent_path[64];
+
+    // Case: simple filename
+    if (!last_slash) {
+        int j;
+        for (j = 0; clean_path[j] && j < MAX_NAME-1; j++)
+            file_name[j] = clean_path[j];
+        file_name[j] = 0;
+        strcpy(parent_path, "");
+    } else {
+        // Split parent path
+        int len = last_slash - clean_path;
+        for (int i = 0; i < len; i++)
+            parent_path[i] = clean_path[i];
+        parent_path[len] = 0;
+
+        // Extract filename
+        int j = 0;
+        const char *name_ptr = last_slash + 1;
+        while (*name_ptr && j < MAX_NAME-1)
+            file_name[j++] = *name_ptr++;
+        file_name[j] = 0;
+    }
+
+    Node *parent = (*parent_path) ? fs_traverse_path(parent_path, 0) : cwd;
+    if (!parent) return;
+
+    if (fs_find(parent, file_name)) {
+        uart_puts("Name already exists!\n");
+        return;
+    }
+    if (parent->child_count >= MAX_FILES) {
+        uart_puts("Directory full!\n");
+        return;
+    }
+
+    Node *file = fs_alloc_node();
+    if (!file) { uart_puts("Node limit reached!\n"); return; }
+
+    file->type = FILE_NODE;
+    file->parent = parent;
+    strcpy(file->name, file_name);
+    file->readonly = 0; // normal file is writable
+
+    parent->children[parent->child_count++] = file;
+}
+
+
+// Create a read-only file (touchro)
+void fs_touch_ro(const char *path) {
+    if (!path) return;
+
+    // Skip leading spaces
+    while (*path == ' ') path++;
+
+    if (*path == '\0') {
+        uart_puts("Error: No filename provided.\n");
+        return;
+    }
+
     const char *last_slash = NULL;
 
     // Find last slash to split parent/name
@@ -333,9 +431,11 @@ void fs_touch(const char *path) {
 
     // Case: simple filename
     if (!last_slash) {
-        int j;
-        for (j = 0; path[j] && j < MAX_NAME-1; j++)
+        int j = 0;
+        while (path[j] && j < MAX_NAME-1) {
             file_name[j] = path[j];
+            j++;
+        }
         file_name[j] = 0;
         strcpy(parent_path, "");
     } else {
@@ -372,9 +472,13 @@ void fs_touch(const char *path) {
     file->type = FILE_NODE;
     file->parent = parent;
     strcpy(file->name, file_name);
+    file->readonly = 1; // read-only file
 
     parent->children[parent->child_count++] = file;
 }
+
+
+
 
 // List directory contents (ls)
 void fs_ls(const char *path) {
@@ -392,6 +496,7 @@ void fs_ls(const char *path) {
         Node *n = dir->children[i];
         uart_puts(n->name);
         if (n->type == DIR_NODE) uart_puts("/");
+        else if (n->readonly) uart_puts(" (ro)");
         uart_puts("  ");
     }
     uart_puts("\n");
@@ -465,6 +570,11 @@ void fs_write(const char *path, const char *text) {
     if (!file) { uart_puts("File does not exist!\n"); return; }
     if (file->type != FILE_NODE) { uart_puts("Not a file!\n"); return; }
 
+    if (file->readonly) {
+        uart_puts("File is read-only! Write aborted.\n");
+        return;
+    }
+
     // Write text to file->content
     int i;
     for (i = 0; i < 127 && text[i]; i++)
@@ -485,6 +595,7 @@ void cmd_help(void) {
     uart_puts("  echo <text>      - Echo text back\n");
     uart_puts("  mkdir <name>     - Create a new directory\n");
     uart_puts("  touch <name>     - Create a new empty file\n");
+    uart_puts("  touchro <name>    - Create a new read-only file\n");
     uart_puts("  ls               - List files and directories\n");
     uart_puts("  cd <name>        - Change directory\n");
     uart_puts("  pwd              - Show current directory path\n");
@@ -557,10 +668,27 @@ void run_command(char *input) {
         char *args = input + 5;
         while (*args == ' ') args++;
         fs_mkdir(args);
+    } else if (strncmp(input, "touchro", 7) == 0) {
+    // Move pointer past "touchro"
+    char *args = input + 7;
+
+    // Skip any leading spaces
+    while (*args == ' ') args++;
+
+    // Check if filename is empty
+    if (*args == '\0') {
+        uart_puts("Error: No filename provided.\n");
+    } else {
+        // Create the read-only file
+        fs_touch_ro(args);
+    }
+
+
     } else if (strncmp(input, "touch", 5) == 0) {
         char *args = input + 5;
         while (*args == ' ') args++;
         fs_touch(args);
+    
     } else if (strncmp(input, "ls", 2) == 0) {
         char *args = input + 2;
         while (*args == ' ') args++;
