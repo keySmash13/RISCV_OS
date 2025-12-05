@@ -797,3 +797,80 @@ void fs_stat(const char *path) {
         uart_puts("\n");
     }
 }
+
+//==================================================
+//          PROGRAM EXECUTION SUPPORT
+//==================================================
+
+// Get executable file content (checks permissions)
+// Returns pointer to content if executable, NULL otherwise
+const char* fs_get_executable(const char *path) {
+    if (!path || *path == '\0') {
+        uart_puts("Usage: exec <filename>\n");
+        return 0;
+    }
+
+    const char *last_slash = 0;
+
+    for (const char *p = path; *p; p++)
+        if (*p == '/') last_slash = p;
+
+    char file_name[MAX_NAME];
+    char parent_path[64];
+
+    if (!last_slash) {
+        int j;
+        for (j = 0; path[j] && j < MAX_NAME-1; j++)
+            file_name[j] = path[j];
+        file_name[j] = 0;
+        strcpy(parent_path, "");
+    } else {
+        int len = last_slash - path;
+        for (int i = 0; i < len; i++)
+            parent_path[i] = path[i];
+        parent_path[len] = 0;
+
+        int j = 0;
+        const char *name_ptr = last_slash + 1;
+        while (*name_ptr && j < MAX_NAME-1)
+            file_name[j++] = *name_ptr++;
+        file_name[j] = 0;
+    }
+
+    // Find the file
+    extern Node *cwd;
+    Node *parent = (*parent_path) ? fs_traverse_path(parent_path, 0) : cwd;
+    if (!parent) return 0;
+
+    Node *file = fs_find(parent, file_name);
+    if (!file) {
+        uart_puts("Program not found: ");
+        uart_puts(path);
+        uart_puts("\n");
+        return 0;
+    }
+
+    if (file->type != FILE_NODE) {
+        uart_puts("Not a file: ");
+        uart_puts(path);
+        uart_puts("\n");
+        return 0;
+    }
+
+    // Check execute permission
+    if (!fs_can_exec(file)) {
+        uart_puts("Permission denied: file is not executable.\n");
+        uart_puts("Hint: use 'chmod ");
+        uart_puts(path);
+        uart_puts(" 5' to make it executable (r-x)\n");
+        return 0;
+    }
+
+    // Check read permission (need to read the script)
+    if (!fs_can_read(file)) {
+        uart_puts("Permission denied: cannot read file.\n");
+        return 0;
+    }
+
+    return file->content;
+}

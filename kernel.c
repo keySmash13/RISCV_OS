@@ -6,6 +6,101 @@
 #include "cmd.h"
 #include "libstr.h"
 
+// Forward declaration for recursive exec
+void run_command(char *input);
+
+//==================================================
+//            SYSTEM SHUTDOWN (SBI CALL)
+//==================================================
+
+// SBI shutdown - tells QEMU/OpenSBI to power off
+static void sbi_shutdown(void) {
+    // SBI legacy shutdown call (extension 0x08)
+    register unsigned long a7 asm("a7") = 0x08;
+    asm volatile("ecall" : : "r"(a7));
+    
+    // If that didn't work, try newer SRST extension
+    // SRST extension ID = 0x53525354, function 0 = shutdown
+    register unsigned long a7_new asm("a7") = 0x53525354;
+    register unsigned long a6 asm("a6") = 0;
+    register unsigned long a0 asm("a0") = 0;  // shutdown type: 0 = shutdown
+    register unsigned long a1 asm("a1") = 0;  // reason: 0 = no reason
+    asm volatile("ecall" : : "r"(a7_new), "r"(a6), "r"(a0), "r"(a1));
+    
+    // Fallback: infinite loop with WFI
+    while(1) {
+        asm volatile("wfi");
+    }
+}
+
+//==================================================
+//            PROGRAM EXECUTION (SCRIPTS)
+//==================================================
+
+// Maximum nesting depth for exec calls (prevent infinite recursion)
+static int exec_depth = 0;
+#define MAX_EXEC_DEPTH 4
+
+// Execute a script file - runs each line as a command
+static void exec_script(const char *path) {
+    // Check recursion depth
+    if (exec_depth >= MAX_EXEC_DEPTH) {
+        uart_puts("Error: Maximum script nesting depth reached.\n");
+        return;
+    }
+
+    // Get the executable content
+    const char *content = fs_get_executable(path);
+    if (!content) return;  // Error already printed
+
+    uart_puts("--- Executing: ");
+    uart_puts(path);
+    uart_puts(" ---\n");
+
+    exec_depth++;
+
+    // Parse and execute each line
+    // Commands are separated by newlines or semicolons
+    char cmd_buffer[100];
+    int cmd_idx = 0;
+
+    for (const char *p = content; ; p++) {
+        char c = *p;
+
+        // End of command: newline, semicolon, or end of content
+        if (c == '\n' || c == ';' || c == '\0') {
+            cmd_buffer[cmd_idx] = '\0';
+
+            // Skip empty lines and whitespace-only lines
+            char *cmd = cmd_buffer;
+            while (*cmd == ' ') cmd++;  // Skip leading spaces
+
+            // Skip comment lines (starting with #)
+            if (*cmd != '\0' && *cmd != '#') {
+                uart_puts("> ");
+                uart_puts(cmd);
+                uart_puts("\n");
+                run_command(cmd);
+            }
+
+            cmd_idx = 0;  // Reset for next command
+
+            if (c == '\0') break;  // End of content
+        } else {
+            // Add character to command buffer
+            if (cmd_idx < 99) {
+                cmd_buffer[cmd_idx++] = c;
+            }
+        }
+    }
+
+    exec_depth--;
+
+    uart_puts("--- Finished: ");
+    uart_puts(path);
+    uart_puts(" ---\n");
+}
+
 //==================================================
 //            INPUT VALIDATION HELPERS
 //==================================================
@@ -42,7 +137,11 @@ static int parse_perm(const char *str, unsigned int *out) {
 void run_command(char *input) {
     while (*input == ' ') input++; // Skip leading spaces
 
-    if (strncmp(input, "help", 4) == 0 && (input[4] == '\0' || input[4] == ' ')) {
+    if (strncmp(input, "exit", 4) == 0 && (input[4] == '\0' || input[4] == ' ')) {
+        uart_puts("Shutting down...\n");
+        sbi_shutdown();
+    }
+    else if (strncmp(input, "help", 4) == 0 && (input[4] == '\0' || input[4] == ' ')) {
         cmd_help();
     } 
     else if (strncmp(input, "echo", 4) == 0 && (input[4] == '\0' || input[4] == ' ')) {
@@ -184,6 +283,17 @@ void run_command(char *input) {
             return;
         }
         fs_cat(args);
+    }
+    else if (strncmp(input, "exec", 4) == 0 && (input[4] == ' ' || input[4] == '\0')) {
+        char *args = input + 4;
+        while (*args == ' ') args++;
+        if (!validate_path(args)) return;
+        if (*args == '\0') {
+            uart_puts("Usage: exec <script_file>\n");
+            uart_puts("  Runs commands from a file. File must have execute permission.\n");
+            return;
+        }
+        exec_script(args);
     }
     else if (*input != '\0') {
         uart_puts("Unknown command. Type 'help' for a list.\n");
