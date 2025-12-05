@@ -15,7 +15,7 @@ In WSL or Linux:
 
 ## Tiny RISC-V 64 Kernel
 
-This is a minimal, educational RISC-V 64-bit kernel written in C, designed to run on bare-metal hardware or an emulator. The kernel provides basic I/O, a tiny filesystem, and a simple shell.
+This is a minimal, educational RISC-V 64-bit kernel written in C, designed to run on bare-metal hardware or an emulator. The kernel provides basic I/O, a filesystem with Unix-like permissions, protection mechanisms, program execution, and an interactive shell.
 
 ### Features
 
@@ -24,17 +24,39 @@ This is a minimal, educational RISC-V 64-bit kernel written in C, designed to ru
 - **Shell:** Interactive command-line interface via UART. Supports commands like:
   - `help` — show available commands
   - `echo <text>` — print text back
+  - `exit` — shutdown the system
   - `mkdir <name>` — create a directory
+  - `rmdir <name>` — delete an empty directory
   - `touch <name>` — create an empty file
-  - `ls` — list files and directories
+  - `touchro <name>` — create a read-only file
+  - `rm <file>` — delete a file
+  - `ls` — list files and directories (shows permissions)
+  - `ls -a` — list all files including hidden
   - `cd <name>` — change directory
   - `pwd` — print current path
   - `write <file> <text>` — write text to a file
   - `cat <file>` — display file contents
+  - `chmod <path> <0-7>` — change file/directory permissions
+  - `stat <path>` — show file/directory information
+  - `exec <file>` — execute commands from a script file
 - **Minimal Filesystem:**  
   - Supports directories and files with fixed-size names and content  
   - Keeps an in-memory node pool for fast allocation  
   - Path traversal and creation (`/` for root, `.` and `..` supported)
+- **Unix-like Permission System:**
+  - Read (r=4), Write (w=2), Execute (x=1) permissions
+  - Permission checking on all file/directory operations
+  - Examples: 7=rwx, 6=rw-, 5=r-x, 4=r--, 0=---
+- **System Protection:**
+  - Protected system directories (`/bin`, `/etc`) marked with `S` flag
+  - System files cannot be deleted or modified
+  - Initial structure: `/bin`, `/etc` (protected), `/home`, `/tmp` (user access)
+- **Program Execution:**
+  - Run script files with the `exec` command
+  - Scripts contain shell commands separated by `;` or newlines
+  - Lines starting with `#` are comments
+  - Requires execute permission (`chmod file 5`)
+  - Nested script execution supported (max depth: 4)
 - **Main Loop:**  
   Continuously reads commands from UART, executes them, and prints results.
 
@@ -87,9 +109,13 @@ Different command libraries
 ### cmd.c
 Contains cmd line commands like `help` and `echo`
 ### fs.c
-Controls the filesystem so one can make files, directories, cd, etc.
+Controls the filesystem so one can make files, directories, cd, etc. Also handles Unix-like permissions (rwx), system file protection, and program execution support.
+### fs.h
+Defines filesystem structures, permission constants (`PERM_READ`, `PERM_WRITE`, `PERM_EXEC`), and flags (`FLAG_SYSTEM`, `FLAG_HIDDEN`).
 ### io.c
 Controls terminal input/output
+### kernel.c
+Main kernel with command parser, shell loop, input validation, script execution engine, and SBI shutdown support.
 ### libstr.c
 A small library of string commands to add string functionality to other files
 ### stdint.h
