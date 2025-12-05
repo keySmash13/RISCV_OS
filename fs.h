@@ -73,4 +73,8 @@ void fs_rmdir(const char *path);        // Remove empty directory
 void fs_chmod(const char *path, unsigned int perms);
 void fs_stat(const char *path);         // Show file info and permissions
 
+// Program execution support
+// Returns pointer to file content if file exists and is executable, NULL otherwise
+const char* fs_get_executable(const char *path);
+
 #endif

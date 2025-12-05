@@ -12,6 +12,7 @@ void cmd_help(void) {
     uart_puts("Available commands:\n");
     uart_puts("  help              - Show this help message\n");
     uart_puts("  echo <text>       - Echo text back\n");
+    uart_puts("  exit              - Shutdown the system\n");
     uart_puts("\n--- File Operations ---\n");
     uart_puts("  touch <name>      - Create file (default: rw permissions)\n");
     uart_puts("  touchro <name>    - Create read-only file\n");
@@ -28,6 +29,11 @@ void cmd_help(void) {
     uart_puts("\n--- Protection & Permissions ---\n");
     uart_puts("  chmod <path> <n>  - Change permissions (0-7)\n");
     uart_puts("  stat <path>       - Show file/dir info\n");
+    uart_puts("\n--- Program Execution ---\n");
+    uart_puts("  exec <file>       - Run commands from a script file\n");
+    uart_puts("  Scripts need execute permission (chmod file 5)\n");
+    uart_puts("  Commands separated by newlines or semicolons\n");
+    uart_puts("  Lines starting with # are comments\n");
     uart_puts("\nPermission values: 4=read, 2=write, 1=execute\n");
     uart_puts("  Examples: 7=rwx, 6=rw-, 5=r-x, 4=r--, 0=---\n");
     uart_puts("System files (S flag) cannot be deleted or modified.\n");
