@@ -1,4 +1,4 @@
-## By Adrian Holdcraft, Madison Byrd, and Katherine Turner
+## By Abigail Holdcraft, Madison Byrd, and Katherine Turner
 
 ## SETUP
 Install QEMU: https://qemu.weilnetz.de/w64/  
